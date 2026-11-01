@@ -7,9 +7,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.Editable
@@ -84,52 +86,77 @@ class MainActivity : Activity() {
             .apply()
     }
 
+    private fun focusIn(v: View?) {
+        v?.animate()?.scaleX(1.12f)?.scaleY(1.12f)?.setDuration(110)?.start()
+    }
+
+    private fun focusOut(v: View?) {
+        v?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(160)?.start()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(
             WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
         )
+        if (Build.VERSION.SDK_INT >= 31) {
+            try {
+                window.setBackgroundBlurRadius(60)
+            } catch (e: Throwable) {
+                // blur not supported on this phone: ignore
+            }
+        }
         loadSettings()
 
         val root = FrameLayout(this)
-        root.setBackgroundColor(Color.parseColor("#66000000"))
+        root.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.parseColor("#40000000"), Color.parseColor("#B3000000"))
+        )
 
         // ---------- HOME LAYER ----------
         val home = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(48), dp(20), dp(20))
+            setPadding(dp(24), dp(56), dp(24), dp(24))
         }
         home.addView(TextClock(this).apply {
             format12Hour = "h:mm"
             format24Hour = "H:mm"
-            textSize = 56f
+            textSize = 76f
+            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
             setTextColor(Color.WHITE)
+            setShadowLayer(12f, 0f, 3f, Color.parseColor("#66000000"))
         })
         home.addView(TextClock(this).apply {
             format12Hour = "EEEE, d MMMM"
             format24Hour = "EEEE, d MMMM"
-            textSize = 16f
-            setTextColor(Color.parseColor("#CCFFFFFF"))
+            textSize = 17f
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            setTextColor(Color.parseColor("#DDFFFFFF"))
+            setShadowLayer(8f, 0f, 2f, Color.parseColor("#66000000"))
         })
         home.addView(View(this), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         home.addView(
             TextView(this).apply {
                 text = "Swipe up for all apps"
                 textSize = 12f
-                setTextColor(Color.parseColor("#99FFFFFF"))
+                setTextColor(Color.parseColor("#88FFFFFF"))
                 gravity = Gravity.CENTER
             },
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(12) }
+            ).apply { bottomMargin = dp(14) }
         )
         dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            background = rounded(Color.parseColor("#33FFFFFF"), 24)
-            setPadding(dp(8), dp(10), dp(8), dp(10))
+            clipChildren = false
+            background = rounded(Color.parseColor("#38FFFFFF"), 30).apply {
+                setStroke(dp(1), Color.parseColor("#33FFFFFF"))
+            }
+            setPadding(dp(10), dp(12), dp(10), dp(12))
         }
         home.addView(
             dock,
@@ -209,8 +236,8 @@ class MainActivity : Activity() {
             textSize = 15f
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_GO
-            background = rounded(Color.parseColor("#33FFFFFF"), 14)
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = rounded(Color.parseColor("#33FFFFFF"), 22)
+            setPadding(dp(20), dp(13), dp(20), dp(13))
         }
         drawer.addView(
             search,
@@ -219,15 +246,16 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
                 topMargin = dp(8)
-                bottomMargin = dp(12)
+                bottomMargin = dp(14)
             }
         )
 
         val grid = GridView(this).apply {
             numColumns = 4
-            verticalSpacing = dp(16)
-            setPadding(0, dp(4), 0, dp(16))
+            verticalSpacing = dp(20)
+            setPadding(0, dp(8), 0, dp(16))
             clipToPadding = false
+            clipChildren = false
         }
         adapter = AppAdapter()
         grid.adapter = adapter
@@ -235,6 +263,24 @@ class MainActivity : Activity() {
         grid.setOnItemLongClickListener { _, _, position, _ ->
             showAppMenu(shown[position])
             true
+        }
+
+        var pressedView: View? = null
+        grid.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    val pos = grid.pointToPosition(ev.x.toInt(), ev.y.toInt())
+                    if (pos >= 0) {
+                        pressedView = grid.getChildAt(pos - grid.firstVisiblePosition)
+                        focusIn(pressedView)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    focusOut(pressedView)
+                    pressedView = null
+                }
+            }
+            false
         }
         drawer.addView(grid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
@@ -377,11 +423,11 @@ class MainActivity : Activity() {
             dock.addView(
                 TextView(this).apply {
                     text = "Long-press an app in the list to add it here"
-                    setTextColor(Color.parseColor("#99FFFFFF"))
+                    setTextColor(Color.parseColor("#AAFFFFFF"))
                     textSize = 12f
                     gravity = Gravity.CENTER
                 },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56))
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60))
             )
             return
         }
@@ -394,8 +440,15 @@ class MainActivity : Activity() {
                     showDockMenu(item)
                     true
                 }
+                setOnTouchListener { v, ev ->
+                    when (ev.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> focusIn(v)
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> focusOut(v)
+                    }
+                    false
+                }
             }
-            dock.addView(iv, LinearLayout.LayoutParams(0, dp(56), 1f))
+            dock.addView(iv, LinearLayout.LayoutParams(0, dp(60), 1f))
         }
     }
 
@@ -503,27 +556,32 @@ class MainActivity : Activity() {
             val row = convertView as? LinearLayout ?: LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
+                clipChildren = false
                 addView(ImageView(context).apply {
-                    layoutParams = LinearLayout.LayoutParams(dp(58), dp(58))
-                    background = rounded(Color.parseColor("#22FFFFFF"), 14)
-                    setPadding(dp(5), dp(5), dp(5), dp(5))
+                    layoutParams = LinearLayout.LayoutParams(dp(66), dp(66))
+                    background = rounded(Color.parseColor("#2B2E36"), 17)
+                    setPadding(dp(8), dp(8), dp(8), dp(8))
                     outlineProvider = ViewOutlineProvider.BACKGROUND
                     clipToOutline = true
+                    elevation = dp(6).toFloat()
                 })
                 addView(
                     TextView(context).apply {
                         setTextColor(Color.WHITE)
-                        textSize = 11f
+                        textSize = 12f
                         maxLines = 1
                         gravity = Gravity.CENTER
                         ellipsize = TextUtils.TruncateAt.END
+                        setShadowLayer(6f, 0f, 1f, Color.parseColor("#80000000"))
                     },
                     LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
-                    ).apply { topMargin = dp(6) }
+                    ).apply { topMargin = dp(8) }
                 )
             }
+            row.scaleX = 1f
+            row.scaleY = 1f
             val item = shown[position]
             (row.getChildAt(0) as ImageView).setImageDrawable(item.icon)
             (row.getChildAt(1) as TextView).text = item.label
